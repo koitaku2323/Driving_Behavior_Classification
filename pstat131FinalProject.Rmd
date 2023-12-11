@@ -1,0 +1,839 @@
+---
+title: "Final"
+author: "Ryan Yee"
+output:
+  pdf_document:
+    toc: yes
+  html_document:
+    toc: yes
+    toc_float: yes
+    code_folding: show
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE,
+                      warning = FALSE)
+
+library(tidymodels)
+library(ISLR)
+library(ISLR2)
+library(tidyverse)
+library(glmnet)
+library(modeldata)
+library(ggthemes)
+library(janitor) # for naming conventions
+library(naniar) # to assess missing data patterns
+library(corrplot) # for a correlation plot
+library(themis) # for upsampling
+library(ranger)
+library(vip)
+tidymodels_prefer()
+
+set.seed(123)
+```
+
+```{r}
+# Read the datasets
+train <- read.csv('~/Github/pstat131FinalProject/data/train_motion_data.csv')
+test <- read.csv('~/Github/pstat131FinalProject/data/test_motion_data.csv')
+
+# Combine the datasets
+combined_data <- rbind(train, test)
+
+# Check the dimensions of the combined dataset
+dim(combined_data)
+
+# Export the combined dataset to a new CSV file
+#write.csv(combined_data, '~/Github/pstat131FinalProject/data/combined_motion_data.csv', row.names = FALSE)
+```
+
+```{r}
+head(combined_data)
+```
+
+```{r}
+combined_data <- combined_data %>%
+  mutate(
+    Class = as.factor(Class)
+  )
+
+head(combined_data)
+```
+
+Perform an initial split of the data. Stratify by the outcome variable.
+
+```{r}
+# Set a seed for reproducibility
+set.seed(123)
+
+# Define the percentage for the training set (e.g., 80%)
+train_percent <- 0.8
+
+# Create a data splitting object with stratified sampling
+data_split <- initial_split(combined_data, prop = train_percent, strata = Class)
+
+# Extract the training and testing sets
+data_train <- training(data_split)
+data_test <- testing(data_split)
+
+# Check the dimensions of the training and testing sets
+dim(data_train)
+dim(data_test)
+```
+
+```{r}
+# Set seed for reproducibility
+set.seed(123)
+
+# Define the number of folds
+num_folds <- 5
+
+# Create a cross-validation object
+data_folds <- vfold_cv(data_train, v = num_folds, strata = "Class")
+
+# Display the folds
+data_folds
+```
+
+```{r}
+head(data_train)
+```
+
+
+Stratified sampling for cross-validation is useful because it ensures that each subgroup or class in the dataset is adequately represented in both the training and validation sets. This enhances the reliability of the model evaluation process and contributes to better generalization performance.
+
+
+
+```{r}
+# Select only numeric variables and handle missing values if necessary
+numeric_data <- select_if(data_train, is.numeric) %>%
+  na.omit()
+
+# Calculate correlation matrix
+cor_matrix <- cor(numeric_data)
+
+# Plot the correlation matrix
+corrplot(cor_matrix, method = "circle", type = "lower", tl.cex = 0.7)
+```
+
+
+We can see that there are no specific strong correlation between each explanatory variable. There are no collinearity.
+
+```{r}
+# Create a recipe
+data_recipe <- recipe(Class ~ AccX + AccY + GyroX + GyroY + GyroZ, data = data_train) %>%
+  
+  # Center and scale all predictors
+  step_normalize(all_predictors())
+```
+
+```{r}
+summary(data_recipe)
+```
+
+
+```{r}
+library(discrim)
+# Specify linear discriminant analysis (LDA) model
+lda_model <- discrim_linear(engine = "MASS")
+
+# Create a workflow
+lda_workflow <- workflow() %>%
+  add_recipe(data_recipe) %>%
+  add_model(lda_model)
+
+# Fit the model to the training data
+data_fit_lda <- fit(lda_workflow, data = data_train)
+
+```
+
+```{r}
+# Specify quadratic discriminant analysis (QDA) model
+qda_model <- discrim_quad(engine = "MASS")
+
+# Create a workflow
+qda_workflow <- workflow() %>%
+  add_recipe(data_recipe) %>%
+  add_model(qda_model)
+
+# Fit the model to the training data
+data_fit_qda <- fit(qda_workflow, data = data_train)
+
+```
+
+
+```{r}
+# Load required libraries
+library(tidymodels)
+library(yardstick)
+
+# Make predictions using each model on the training data
+#predictions_log <- predict(titanic_fit_log, new_data = train_data)
+predictions_lda <- predict(data_fit_lda, new_data = data_train)
+predictions_qda <- predict(data_fit_qda, new_data = data_train)
+#predictions_knn <- predict(titanic_fit_knn, new_data = train_data)
+
+# Combine predictions for all models with true labels
+all_predictions <- bind_cols(
+  truth = data_train$Class,
+ 
+  lda = as.numeric(predictions_lda$.pred_class),#Convert to numeric
+  qda = as.numeric(predictions_qda$.pred_class)#Convert to numeric
+)
+
+
+final_lda_model_test <- augment(data_fit_lda, 
+                               data_test) %>% 
+  select(Class, starts_with(".pred"))
+
+roc_results_lda <- roc_auc(final_lda_model_test, truth = Class, .pred_AGGRESSIVE:.pred_SLOW)
+
+
+roc_curve(final_lda_model_test, truth = Class, .pred_AGGRESSIVE:.pred_SLOW) %>% 
+  autoplot()
+
+
+conf_mat(final_lda_model_test, truth = Class, 
+         .pred_class) %>% 
+  autoplot(type = "heatmap")
+
+roc_results_lda
+```
+
+```{r}
+final_qda_model_test <- augment(data_fit_qda, 
+                               data_test) %>% 
+  select(Class, starts_with(".pred"))
+
+roc_results_qda <- roc_auc(final_qda_model_test, truth = Class, .pred_AGGRESSIVE:.pred_SLOW)
+
+
+roc_curve(final_qda_model_test, truth = Class, .pred_AGGRESSIVE:.pred_SLOW) %>% 
+  autoplot()
+
+
+conf_mat(final_qda_model_test, truth = Class, 
+         .pred_class) %>% 
+  autoplot(type = "heatmap")
+
+roc_results_qda
+```
+
+
+
+
+```{r}
+# Create a KNN model with k = 5 using the kknn engine
+knn_model <- nearest_neighbor(neighbors = tune()) %>%
+  set_mode("classification") %>%
+  set_engine("kknn")
+
+knn_data_workflow <- workflow() %>%
+  add_recipe(data_recipe) %>%
+  add_model(knn_model)
+
+neighbors_grid <- grid_regular(neighbors(range = c(1, 10)), levels = 10)
+```
+
+```{r}
+knn_tune_res_data <- tune_grid(
+  object = knn_data_workflow, 
+  resamples = data_folds, 
+  grid = neighbors_grid
+)
+```
+
+```{r}
+collect_metrics(knn_tune_res_data)
+
+```
+
+```{r}
+best_knn_data <- select_by_one_std_err(knn_tune_res_data,
+                          metric = "roc_auc",
+                          neighbors
+                          )
+best_knn_data
+```
+
+```{r}
+# Logistic Regression
+
+knn_final_data <- finalize_workflow(knn_data_workflow,
+                                      best_knn_data)
+
+knn_final_data <- fit(knn_final_data, 
+                        data = data_train)
+
+
+final_knn_model_test <- augment(knn_final_data, 
+                               data_test) %>% 
+  select(Class, starts_with(".pred"))
+
+roc_results_knn <- roc_auc(final_knn_model_test, truth = Class, .pred_AGGRESSIVE:.pred_SLOW)
+
+
+roc_curve(final_knn_model_test, truth = Class, .pred_AGGRESSIVE:.pred_SLOW) %>% 
+  autoplot()
+
+
+conf_mat(final_knn_model_test, truth = Class, 
+         .pred_class) %>% 
+  autoplot(type = "heatmap")
+
+roc_results_knn
+
+```
+
+
+```{r}
+en_spec <- multinom_reg(mixture = tune(), 
+                        penalty = tune()) %>%
+  set_mode("classification") %>%
+  set_engine("glmnet")
+
+en_workflow <- workflow() %>% 
+  add_recipe(data_recipe) %>% 
+  add_model(en_spec)
+
+en_grid <- grid_regular(penalty(range = c(0.01, 3), trans = identity_trans()),
+                        mixture(range = c(0, 1)),
+                             levels = 10)
+```
+
+```{r}
+rf_class_spec <- rand_forest(mtry = tune(), 
+                           trees = tune(), 
+                           min_n = tune()) %>%
+  set_engine("ranger", importance = "impurity") %>% 
+  set_mode("classification")
+
+rf_class_wf <- workflow() %>% 
+  add_model(rf_class_spec) %>% 
+  add_recipe(data_recipe)
+```
+
+```{r}
+rf_grid <- grid_regular(mtry(range = c(1, 8)), 
+                        trees(range = c(200, 600)),
+                        min_n(range = c(10, 20)),
+                        levels = 8)
+rf_grid
+```
+
+```{r}
+# # Tune Elastic Net Model
+# en_tune_res <- tune_grid(
+#   en_workflow,
+#   resamples = data_folds,
+#   grid = en_grid
+# )
+```
+
+
+```{r}
+# # Tune Random Forest Model
+# tune_class <- tune_grid(
+#   rf_class_wf,
+#   resamples = data_folds,
+#   grid = rf_grid
+# )
+```
+
+```{r}
+# save(en_tune_res, file = "en_tune_res.rda")
+# save(tune_class, file = "tune_class.rda")
+```
+
+```{r}
+load("en_tune_res.rda")
+load("tune_class.rda")
+```
+
+```{r}
+collect_metrics(en_tune_res)
+```
+
+```{r}
+autoplot(en_tune_res) + theme_minimal()
+```
+
+```{r}
+collect_metrics(tune_class)
+```
+
+```{r}
+autoplot(tune_class) + theme_minimal()
+```
+
+```{r}
+show_best(en_tune_res, n = 1)
+```
+
+```{r}
+best_en <- select_best(en_tune_res)
+```
+
+```{r}
+show_best(tune_class, n = 1)
+```
+
+```{r}
+best_rf_class <- select_best(tune_class)
+```
+
+```{r}
+final_rf_model <- finalize_workflow(rf_class_wf, best_rf_class)
+final_rf_model <- fit(final_rf_model, data_train)
+```
+
+```{r}
+final_rf_model %>% extract_fit_parsnip() %>% 
+  vip() +
+  theme_minimal()
+```
+
+```{r}
+final_rf_model_test <- augment(final_rf_model, 
+                               data_test) %>% 
+  select(Class, starts_with(".pred"))
+
+roc_auc(final_rf_model_test, truth = Class, .pred_AGGRESSIVE:.pred_SLOW)
+```
+
+```{r}
+roc_curve(final_rf_model_test, truth = Class, .pred_AGGRESSIVE:.pred_SLOW) %>% 
+  autoplot()
+```
+
+```{r}
+conf_mat(final_rf_model_test, truth = Class, 
+         .pred_class) %>% 
+  autoplot(type = "heatmap")
+```
+
+
+```{r}
+combined_data <- read.csv('~/Github/pstat131FinalProject/data/combined_motion_data.csv')
+
+combined_data <- combined_data %>%
+  mutate(Class = factor(ifelse(Class %in% c("NORMAL", "SLOW"), "SAFE", as.character(Class))))
+
+head(combined_data)
+```
+
+```{r}
+# Set a seed for reproducibility
+set.seed(123)
+
+# Define the percentage for the training set (e.g., 80%)
+train_percent <- 0.8
+
+# Create a data splitting object with stratified sampling
+data_split <- initial_split(combined_data, prop = train_percent, strata = Class)
+
+# Extract the training and testing sets
+data_train <- training(data_split)
+data_test <- testing(data_split)
+
+# Check the dimensions of the training and testing sets
+dim(data_train)
+dim(data_test)
+```
+
+```{r}
+
+# Set seed for reproducibility
+set.seed(123)
+
+# Define the number of folds
+num_folds <- 5
+
+# Create a cross-validation object
+data_folds <- vfold_cv(data_train, v = num_folds, strata = "Class")
+
+# Display the folds
+data_folds
+```
+
+```{r}
+# Create a recipe
+data_recipe <- recipe(Class ~ AccX + AccY + GyroX + GyroY + GyroZ, data = data_train) %>%
+  
+  # Center and scale all predictors
+  step_normalize(all_predictors())
+```
+
+```{r}
+# Specify logistic regression model
+logistic_model <- logistic_reg(mode = "classification", engine = "glm")
+
+# Create a workflow
+lm_data_workflow <- workflow() %>%
+  add_model(logistic_model) %>%
+  add_recipe(data_recipe)
+
+lm_fit_val_data <- lm_data_workflow %>% 
+  fit_resamples(resamples = data_folds)
+
+collect_metrics(lm_fit_val_data)
+```
+
+```{r}
+# Create a KNN model with k = 5 using the kknn engine
+knn_model <- nearest_neighbor(neighbors = tune()) %>%
+  set_mode("classification") %>%
+  set_engine("kknn")
+
+knn_data_workflow <- workflow() %>%
+  add_recipe(data_recipe) %>%
+  add_model(knn_model)
+
+neighbors_grid <- grid_regular(neighbors(range = c(1, 10)), levels = 10)
+
+# Specify logistic regression model
+logistic_model <- logistic_reg(mode = "classification", engine = "glm")
+
+# Create a workflow
+lm_titanic_workflow <- workflow() %>%
+  add_model(logistic_model) %>%
+  add_recipe(data_recipe)
+
+# Elastic Net
+data_en_spec <- logistic_reg(mixture = tune(), 
+                      penalty = tune()) %>%
+  set_mode("classification") %>%
+  set_engine("glmnet")
+
+data_en_workflow <- workflow() %>% 
+  add_recipe(data_recipe) %>% 
+  add_model(data_en_spec)
+
+data_en_grid <- grid_regular(penalty(range = c(0, 1)),
+                        mixture(range = c(0, 1)),
+                             levels = 10)
+```
+
+
+```{r}
+knn_tune_res_data <- tune_grid(
+  object = knn_data_workflow, 
+  resamples = data_folds, 
+  grid = neighbors_grid
+)
+
+lm_fit_val_data <- lm_data_workflow %>% 
+  fit_resamples(resamples = data_folds)
+
+en_tune_res_data<- tune_grid(
+  data_en_workflow,
+  resamples = data_folds, 
+  grid = data_en_grid
+)
+```
+
+#### Question 11
+
+Use `collect_metrics()` to print the mean and standard errors of the performance metric ***area under the ROC curve*** for each model across folds.
+
+Decide which of the models has performed the best. Explain how/why you made this decision.
+
+```{r}
+collect_metrics(knn_tune_res_data)
+
+collect_metrics(lm_fit_val_data)
+
+collect_metrics(en_tune_res_data)
+```
+
+
+
+
+
+
+
+
+
+```{r}
+# Load Necessary Libraries & Source Custom Functions
+library(tidyverse)
+library(tidymodels)
+library(tidytext)
+library(keras)
+library(tensorflow)
+# source('~/GitHub/module2-f23-module2-group9/scripts/preprocessing.R')
+```
+
+```{r}
+# Split the data into training and test sets
+set.seed(102722)
+partitions <- combined_data %>%
+  initial_split(prop = 0.8)
+```
+
+```{r}
+# Must run this code prior using Tensorflow
+use_virtualenv("r-reticulate")
+```
+
+
+```{r}
+head(combined_data)
+```
+
+```{r}
+# Load Necessary Libraries & Source Custom Functions
+library(tidyverse)
+library(tidymodels)
+library(tidytext)
+library(keras)
+library(tensorflow)
+
+# Split the data into training and test sets
+set.seed(102722)
+partitions <- combined_data %>%
+  initial_split(prop = 0.8)
+
+# Extract features for multiclass classification
+x_train_multiclass <- training(partitions) %>%
+  select(AccX, AccY, AccZ, GyroX, GyroY, GyroZ) %>%
+  as.matrix()
+
+# Reshape input data for LSTM (assuming 3 time steps for each feature)
+time_steps <- 2
+features <- ncol(x_train_multiclass)
+x_train_multiclass <- array(x_train_multiclass, dim = c(nrow(x_train_multiclass), time_steps, features))
+
+# Extract multiclass labels
+y_train_multiclass <- training(partitions) %>%
+  pull(Class) %>%
+  as.numeric() - 1
+
+y_train_multiclass <- to_categorical(y_train_multiclass, num_classes = 2)
+
+# Specify and compile LSTM model
+model_multiclass_lstm <- keras_model_sequential() %>%
+  layer_lstm(units = 50, input_shape = c(time_steps, features)) %>%
+  layer_dropout(rate = 0.5) %>%
+  layer_dense(units = 2, activation = 'softmax')
+
+model_multiclass_lstm %>%
+  compile(
+    loss = 'categorical_crossentropy',
+    optimizer = optimizer_adam(lr = 0.001),
+    metrics = c('accuracy')
+  )
+
+# Train the LSTM model
+history_multiclass_lstm <- model_multiclass_lstm %>%
+  fit(
+    x = x_train_multiclass,
+    y = y_train_multiclass,
+    validation_split = 0.2,
+    epochs = 10,
+    batch_size = 32
+  )
+
+```
+
+```{r}
+library(pROC)
+library(caret)
+
+y_test_multiclass <- testing(partitions) %>%
+  pull(Class) %>%
+  as.numeric() - 1
+
+# Extract features for multiclass classification
+x_test_multiclass <- testing(partitions) %>%
+  select(AccX, AccY, AccZ, GyroX, GyroY, GyroZ) %>%
+  as.matrix()
+
+# Assuming time_steps is 2 and features is the number of features
+time_steps <- 2
+features <- ncol(x_test_multiclass)
+
+# Reshape input data for LSTM
+x_test_multiclass <- array(x_test_multiclass, dim = c(nrow(x_test_multiclass), time_steps, features))
+
+y_test_multiclass <- to_categorical(y_test_multiclass, num_classes = 2)
+
+
+# Evaluate the best model on the test set
+test_metrics <- model_multiclass_lstm %>% evaluate(x_test_multiclass, y_test_multiclass)
+
+# Print test metrics
+print(test_metrics)
+
+
+# Predictions on the test set
+probabilities <- model_multiclass_lstm %>% predict(x_test_multiclass)
+predictions <- max.col(probabilities) - 1
+
+# Convert predictions and true labels to factor
+predictions_factor <- factor(predictions, levels = 0:1, labels = c("AGGRESSIVE", "SAFE"))
+y_test_multiclass_factor <- factor(y_test_multiclass, levels = 0:1, labels = c("AGGRESSIVE", "SAFE"))
+
+# ROC Curve
+# roc_results <- roc(y_test_multiclass_factor, as.numeric(predictions_factor))
+# plot(roc_results, col = c("blue", "red"), lty = c(1, 1), lwd = 2)
+# 
+# # Confusion Matrix
+# conf_mat <- confusionMatrix(predictions_factor, y_test_multiclass_factor)
+# print(conf_mat)
+# 
+# # Confusion Matrix Plot
+# confusionMatrix::confusionMatrix(predictions_factor, y_test_multiclass_factor) %>%
+#   autoplot(type = "heatmap")
+
+```
+
+
+```{r}
+# best_lstm <- model_multiclass_lstm
+# 
+# final_lstm_model_test <- augment(best_lstm, 
+#                                data_test) %>% 
+#   select(Class, starts_with(".pred"))
+# 
+# roc_results_lstm <- roc_auc(final_lstm_model_test, truth = Class, .pred_AGGRESSIVE:.pred_SAFE)
+# 
+# 
+# roc_curve(final_lstm_model_test, truth = Class, .pred_AGGRESSIVE:.pred_SAFE) %>% 
+#   autoplot()
+# 
+# 
+# conf_mat(final_lstm_model_test, truth = Class, 
+#          .pred_class) %>% 
+#   autoplot(type = "heatmap")
+# 
+# roc_results_lstm
+```
+
+
+```{r}
+# Evaluate Multiclass LSTM Model using the training/testing partition (not the testing data)
+evaluate(model_multiclass_lstm, x_train_multiclass, y_train_multiclass)
+```
+
+```{r}
+# Load Necessary Libraries & Source Custom Functions
+library(tidyverse)
+library(tidymodels)
+library(tidytext)
+library(keras)
+library(tensorflow)
+library(dplyr)
+
+# Assuming your response variable is a factor
+combined_data <- combined_data %>%
+  mutate(Class = factor(ifelse(Class %in% c("NORMAL", "SLOW"), "SAFE", as.character(Class))))
+
+
+# Split the data into training and test sets
+set.seed(102722)
+partitions <- combined_data %>%
+  initial_split(prop = 0.8)
+
+# Extract features for multiclass classification
+x_train_multiclass <- training(partitions) %>%
+  select(AccX, AccY, AccZ, GyroX, GyroY, GyroZ) %>%
+  as.matrix()
+
+# Reshape input data for LSTM (assuming 3 time steps for each feature)
+time_steps <- 3
+n_features <- ncol(x_train_multiclass)
+x_train_multiclass <- array(x_train_multiclass, dim = c(nrow(x_train_multiclass), time_steps, features))
+
+# Extract multiclass labels
+y_train_multiclass <- training(partitions) %>%
+  pull(Class) %>%
+  as.numeric() - 1
+
+y_train_multiclass <- to_categorical(y_train_multiclass, num_classes = 3)
+
+# Make sure to adjust input shapes, units, and other parameters based on your data
+model_cnn_lstm_2classes <- keras_model_sequential() %>%
+  layer_conv_1d(filters = 32, kernel_size = 2, activation = 'relu', input_shape = c(time_steps, n_features)) %>%
+  layer_lstm(units = 50, activation = 'relu') %>%
+  layer_dropout(0.5) %>%
+  layer_dense(units = 3, activation = 'softmax')  # Assuming 2 classes
+
+model_cnn_lstm_2classes %>%
+  compile(
+    loss = 'categorical_crossentropy',
+    optimizer = optimizer_adam(lr = 0.001),
+    metrics = c('accuracy')
+  )
+
+# Train the CNN-LSTM model with your data
+# Make sure to adjust x_train, y_train, validation_split, epochs, and batch_size
+history_cnn_lstm_2classes <- model_cnn_lstm_2classes %>%
+  fit(
+    x = x_train_multiclass,
+    y = y_train_multiclass,
+    validation_split = 0.2,
+    epochs = 10,
+    batch_size = 32
+  )
+
+
+
+
+```
+
+```{r}
+# Evaluate CNN-LSTM Model using the training/testing partition (not the testing data)
+evaluate(model_cnn_lstm_2classes, x_train_multiclass, y_train_multiclass)
+```
+
+
+
+
+
+
+```{r}
+# Get Multiclass Model Details
+summary(model_multiclass)
+```
+
+```{r}
+# Get Multiclass Model Details
+summary(model_multiclass_lstm)
+```
+
+```{r}
+# # Make predictions on the test data
+# preds_multiclass <- predict(model_multiclass_lstm, y_test_multiclass) %>%
+#   as.data.frame()
+# 
+# # Assuming preds_multiclass is a matrix of predicted probabilities
+# #pred_classes_multiclass <- max.col(preds_multiclass)
+# 
+# # Assuming preds_multiclass is a data frame of predicted probabilities with one row for each observation and one column for each class
+# 
+# # Get the predicted classes (column name with the highest probability for each observation)
+# pred_classes_multiclass <- colnames(preds_multiclass)[apply(preds_multiclass, 1, which.max)]
+# 
+# # Format multiclass predictions
+# class_labels_multiclass <- combined_data %>% pull(Class) %>% levels()
+# pred_classes_multiclass <- factor(pred_classes_multiclass, levels = class_labels_multiclass)
+# 
+# # Create multiclass prediction data frame
+# pred_df_multiclass <- data_test %>%
+#   bind_cols(mclass.pred = pred_classes_multiclass) %>%
+#   select(Class.pred)
+# 
+# 
+# # Save the multiclass prediction data frame
+# #save(pred_df_multiclass, file = "~/GitHub/module2-f23-module2-group9/results/Ryan_Multiclass_Model_Prediction.RData")
+# 
+# #save_model_tf(model_binary, "~/GitHub/module2-f23-module2-group9/results")
+
+```
+
+
+
+
+
+
