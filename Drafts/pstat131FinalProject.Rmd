@@ -1,36 +1,101 @@
 ---
-title: "Final"
+title: "Classifying Driver Behavior"
 author: "Ryan Yee"
+date: "2023-12-14"
 output:
-  pdf_document:
-    toc: yes
   html_document:
     toc: yes
     toc_float: yes
     code_folding: show
+  pdf_document:
+    toc: yes
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, message = FALSE,
-                      warning = FALSE)
-
-library(tidymodels)
-library(ISLR)
-library(ISLR2)
+```{r setup, include=FALSE, echo=FALSE}
+library(dplyr)
+library(corrplot)  # for the correlation plot
+library(discrim)  # for linear discriminant analysis
+library(corrr)   # for calculating correlation
+library(knitr)   # to help with the knitting process
+library(MASS)    # to assist with the markdown processes
 library(tidyverse)
+library(tidymodels)
+library(ggplot2)   # for most of our visualizations
+library(ggrepel)
+library(ggimage)
+library(rpart.plot)  # for visualizing trees
+library(vip)         # for variable importance 
+library(vembedr)     # for embedding links
+library(janitor)     # for cleaning out our data
+library(yardstick) # for measuring certain metrics
 library(glmnet)
 library(modeldata)
 library(ggthemes)
-library(janitor) # for naming conventions
 library(naniar) # to assess missing data patterns
-library(corrplot) # for a correlation plot
 library(themis) # for upsampling
 library(ranger)
-library(vip)
+library(finalfit) # visualizing missing data
 tidymodels_prefer()
+theme_set(theme_bw())
 
-set.seed(123)
+
+knitr::opts_chunk$set(   # basic chunk settings
+    echo = TRUE,
+    message = FALSE,
+    warning = FALSE,
+    fig.height = 5,
+    fig.width = 7,
+    tidy = TRUE,
+    tidy.opts = list(width.cutoff = 60)
+)
+
+opts_chunk$set(tidy.opts=list(width.cutoff=60),tidy=TRUE)
+options(digits = 4)
+
+set.seed(123) # Initial set seed for reproducibility
+
+indent1 = '    '        # basic indent settings
+indent2 = '        '
+indent3 = '            '
 ```
+
+## Dataset Description
+
+The dataset at hand focuses on predicting driving behavior, specifically targeting aggressive driving actions that contribute significantly to road traffic accidents. The data was collected using an Android application designed to utilize the accelerometer and gyroscope sensors on smartphones, with a specific emphasis on a Samsung Galaxy S21 device. The recorded information includes acceleration and rotation data along the X, Y, and Z axes, timestamp information, and classification labels indicating whether the driving behavior is categorized as Slow, Normal, or Aggressive. Noteworthy aspects of the dataset include a sampling rate of 2 samples per second, removal of gravitational acceleration, and the use of sensors for data collection.
+
+## Introduction to the Machine Learning Project
+
+In this machine learning project, our primary goal is to develop a model capable of swiftly and accurately predicting dangerous driving behavior. Aggressive driving actions, such as speeding, abrupt braking, and sudden turns, are crucial factors in numerous fatal crashes, constituting over half of reported incidents. Our focus lies in enhancing road safety by anticipating and classifying driving behaviors. The dataset, derived from sensor data of a Samsung Galaxy S21, enables us to employ deep learning and machine learning techniques for efficient prediction.
+
+## Inspiration and Motive
+
+Imagine a world where road users are informed in real-time about potentially dangerous driving behaviors, allowing them to adjust and respond proactively. Inspired by the desire to mitigate road accidents and ensure the safety of individuals, this project aims to provide a technological solution. The prediction of aggressive driving behaviors seeks to contribute to a safer and more secure road environment. The motivation stems from the belief that technology can play a pivotal role in preventing accidents and safeguarding lives.
+
+## Additional Information
+
+Understanding the motivation behind predicting aggressive driving behavior is crucial. Forecasting dangerous driving actions facilitates informed decision-making on the road. This model aims to be a proactive tool, not only for individual drivers but also for broader applications in enhancing road safety measures.
+
+Our model incorporates data-driven insights into the realm of driving behavior. The relevance of this model lies in its potential to empower drivers, passengers, and even automated systems with the ability to anticipate and respond to aggressive driving actions, ultimately contributing to a safer and more secure road ecosystem.
+
+## Project Roadmap
+
+In embarking on the development of our machine learning model to predict aggressive driving behavior, we will begin by collecting and preprocessing data through an Android application specifically designed for this purpose on the Samsung Galaxy S21. The dataset, derived from accelerometer and gyroscope sensors, will undergo thorough cleaning and gravitational acceleration removal to ensure data integrity. Subsequently, an in-depth Exploratory Data Analysis (EDA) will be conducted, visually inspecting acceleration and rotation patterns for each driving behavior category—Slow, Normal, and Aggressive. Feature engineering will follow, extracting pertinent features and encoding categorical labels for predictive modeling.
+
+Upon completing data preparation, we will execute a training/test split and establish a robust 10-fold cross-validation strategy for model validation. Multiple classification models, including Logistic Regression, Decision Trees, Random Forest, and others, will be implemented and evaluated based on cross-validated metrics. The models will undergo training and evaluation, with performance metrics such as accuracy, precision, recall, and F1 score analyzed comprehensively. Model comparison will guide the selection of the most effective predictive model for aggressive driving behavior.
+
+The chosen model will then undergo deployment and testing in real-world or simulated driving scenarios to assess its accuracy and effectiveness. Fine-tuning and optimization iterations will follow, focusing on hyperparameter adjustments to enhance predictive capabilities and optimize the model for real-time predictions. Finally, comprehensive documentation will be provided, summarizing key findings, insights, and the model's usage instructions for future reference. This systematic roadmap aims to drive the project toward success, ultimately contributing to enhanced road safety through the prediction of aggressive driving behaviors.
+
+## Exploratory Data Analysis
+
+Before delving into the modeling phase, a critical step is to conduct an in-depth exploration of our dataset. The raw data, collected through smartphone sensors capturing accelerometer and gyroscope information, may require careful examination and preparation before its application in predictive modeling. Initial data loading may reveal imperfections such as variables needing conversion to factors or missing values requiring attention. 
+
+Our primary objective is to create a response variable that distinctly categorizes whether a driving scenario is classified as Slow, Normal, or Aggressive. This involves meticulous data manipulation and cleaning to ensure the dataset's readiness for subsequent analysis. Variables may need to be transformed or encoded, and missing values addressed before moving forward.
+
+In this exploratory data analysis (EDA) section, we will systematically navigate through data manipulation and tidying processes, setting the stage for a comprehensive understanding of the dataset. Visualizations and analytical functions will be employed to scrutinize key variables, unveiling patterns, distributions, and potential correlations. This critical phase is pivotal in laying the groundwork for robust predictive modeling, ensuring that our data is not only pristine but also conducive to extracting meaningful insights for the task of predicting driving behavior accurately.
+
+### Loading and Exploring Raw Data
+
+Lets load the motion data collected by the accelerometer and gyroscope sensors! The sourced data-set was already split into train/testing sets. However, we will combine them and conduct a custom split.
 
 ```{r}
 # Read the datasets
@@ -47,9 +112,68 @@ dim(combined_data)
 #write.csv(combined_data, '~/Github/pstat131FinalProject/data/combined_motion_data.csv', row.names = FALSE)
 ```
 
+Our data set contains 6728 rows and 8 columns. It has sufficient amount of data for our model to learn effectively!
+
+
+
+Now lets take a look at the variables:
+
 ```{r}
-head(combined_data)
+combined_data %>% head()
 ```
+
+### Variable Description
+
+Our data set consists of the following variables:
+
+- **AccX**: A numerical variable representing acceleration along the X-axis in meters per second squared (m/s²).
+- **AccY**: A numerical variable representing acceleration along the Y-axis in meters per second squared (m/s²).
+- **AccZ**: A numerical variable representing acceleration along the Z-axis in meters per second squared (m/s²).
+- **GyroX**: A numerical variable representing rotation along the X-axis in degrees per second (°/s).
+- **GyroY**: A numerical variable representing rotation along the Y-axis in degrees per second (°/s).
+- **GyroZ**: A numerical variable representing rotation along the Z-axis in degrees per second (°/s).
+- **Class**: A categorical variable (factor) indicating the driving behavior classification, which includes categories such as SLOW, NORMAL, and AGGRESSIVE.
+- **Timestamp**: An integer variable representing time in seconds.
+
+```{r}
+# Visualization of Accelerometer readings
+ggplot(combined_data, aes(x = Timestamp, y = AccX, color = Class)) +
+  geom_line() +
+  labs(title = "Acceleration along X-axis Over Time", x = "Timestamp", y = "AccX") +
+  theme_minimal()
+```
+
+We can see that aggressive drivers accelerate more than normal and slow drivers.
+
+```{r}
+# Correlation matrix for numerical variables
+cor_matrix <- cor(combined_data[, c("AccX", "AccY", "AccZ", "GyroX", "GyroY", "GyroZ")])
+corrplot(cor_matrix, method = "color", addCoef.col = "black")
+```
+
+There seems to be a minimal negative correlation between the variables GyroZ and AccX, this is because there will be significant increase in down-force when accelerating. For example, when launching the car, the front of the car will be lowered, and the rear will be lifted.
+
+```{r}
+# Plot the distribution of the 'Class' variable
+ggplot(combined_data, aes(x = Class, fill = Class)) +
+  geom_bar() +
+  labs(title = "Distribution of Driving Behavior Classes", x = "Class", y = "Count") +
+  theme_minimal()
+```
+
+We can see that the distribution of the Driving Behavior Class are relatively balanced hence no up-sampling will be needed.
+
+
+It is possible for the sensors to mal-function so let's check for missing data in our data set just in case!
+
+```{r}
+combined_data %>% missing_plot()
+```
+
+Good! It seems like We do not have any missing data! Let's proceed!
+
+
+Since we want to classify the driving behavior of the driver, our response variable will be `Class`, which we will need to convert to a factor. The `Class` variable contains three different Categories: SLOW, NORMAL, and AGGRESSIVE; which is a multiclass variable. We can also aggregate the SLOW and NORMAL class into a single class, SAFE, to implement a binary classification. We will proceed with a multiclass classification for now, and explore binary classification later.
 
 ```{r}
 combined_data <- combined_data %>%
@@ -81,6 +205,18 @@ dim(data_train)
 dim(data_test)
 ```
 
+### *k*-fold cross-validation
+
+We will use *k*-fold cross-validation with k = 5.
+
+**1. What is *k*-fold cross-validation?**
+
+*k*-fold cross-validation is a resampling technique used to assess the performance and generalizability of a predictive model. In this approach, the original training dataset is randomly partitioned into *k* equally sized folds. The model is trained *k* times, each time using a different fold as the test set and the remaining folds as the training set. This process results in *k* performance metrics, usually averaged to provide a more robust estimate of the model's performance.
+
+**2. Why should we use *k*-fold cross-validation?**
+
+*k*-fold cross-validation is employed to obtain a more reliable estimate of a model's performance compared to a single train-test split. By training and evaluating the model multiple times on different subsets of the data, *k*-fold cross-validation helps to ensure that the model's performance is representative across various data partitions. This is particularly important because the performance of a model can be sensitive to the specific data points in a single train-test split. Using multiple folds allows for a better understanding of the model's stability and generalization capabilities.
+
 ```{r}
 # Set seed for reproducibility
 set.seed(123)
@@ -90,47 +226,33 @@ num_folds <- 5
 
 # Create a cross-validation object
 data_folds <- vfold_cv(data_train, v = num_folds, strata = "Class")
-
-# Display the folds
-data_folds
 ```
 
-```{r}
-head(data_train)
-```
+### Create Recipe
 
+Set up a recipe to predict `Class` with `AccX`, `AccY`, `AccZ`, `GyroX`, `GyroY`, `GyroZ`.
 
-Stratified sampling for cross-validation is useful because it ensures that each subgroup or class in the dataset is adequately represented in both the training and validation sets. This enhances the reliability of the model evaluation process and contributes to better generalization performance.
+-   Center and scale all predictors. 
 
-
-
-```{r}
-# Select only numeric variables and handle missing values if necessary
-numeric_data <- select_if(data_train, is.numeric) %>%
-  na.omit()
-
-# Calculate correlation matrix
-cor_matrix <- cor(numeric_data)
-
-# Plot the correlation matrix
-corrplot(cor_matrix, method = "circle", type = "lower", tl.cex = 0.7)
-```
-
-
-We can see that there are no specific strong correlation between each explanatory variable. There are no collinearity.
+We will not be including `Timestamp` as a predictor as it will lead to over-fitting.  This is because the classes are ordered by `Timestamp` by the nature of the data collection process. Rows with similar `Timestamp` are very likely to have the same class. Hence the `Timestamp` variable should be omitted.
 
 ```{r}
 # Create a recipe
-data_recipe <- recipe(Class ~ AccX + AccY + GyroX + GyroY + GyroZ, data = data_train) %>%
+data_recipe <- recipe(Class ~ AccX + AccY + AccZ + GyroX + GyroY + GyroZ, data = data_train) %>%
   
   # Center and scale all predictors
   step_normalize(all_predictors())
 ```
 
+Because building models take so much computing time, we will be saving the results to an RDA file. This is done so that once we have the model we want, we can go back anytime later and load it.
+
 ```{r}
-summary(data_recipe)
+save(data_folds, data_recipe, data_train, data_test, file = "~/Github/pstat131FinalProject/RDA/Model_Setup.rda")
 ```
 
+
+
+Specify a linear discriminant analysis model for classification using the `"MASS"` engine.
 
 ```{r}
 library(discrim)
@@ -147,6 +269,8 @@ data_fit_lda <- fit(lda_workflow, data = data_train)
 
 ```
 
+Specify a quadratic discriminant analysis model for classification using the `"MASS"` engine.
+
 ```{r}
 # Specify quadratic discriminant analysis (QDA) model
 qda_model <- discrim_quad(engine = "MASS")
@@ -161,6 +285,7 @@ data_fit_qda <- fit(qda_workflow, data = data_train)
 
 ```
 
+We will use `predict()` and `bind_cols()` to generate predictions using each of these 2 models and the **training** data. Then use the metric of **area under the ROC curve** to assess the performance of the two models.
 
 ```{r}
 # Load required libraries
@@ -168,10 +293,8 @@ library(tidymodels)
 library(yardstick)
 
 # Make predictions using each model on the training data
-#predictions_log <- predict(titanic_fit_log, new_data = train_data)
 predictions_lda <- predict(data_fit_lda, new_data = data_train)
 predictions_qda <- predict(data_fit_qda, new_data = data_train)
-#predictions_knn <- predict(titanic_fit_knn, new_data = train_data)
 
 # Combine predictions for all models with true labels
 all_predictions <- bind_cols(
@@ -200,6 +323,8 @@ conf_mat(final_lda_model_test, truth = Class,
 roc_results_lda
 ```
 
+The linear discriminant analysis model resulted with a roc_auc score of 0.5376. 
+
 ```{r}
 final_qda_model_test <- augment(data_fit_qda, 
                                data_test) %>% 
@@ -219,8 +344,10 @@ conf_mat(final_qda_model_test, truth = Class,
 roc_results_qda
 ```
 
+The quadratic discriminant analysis model resulted with a roc_auc score of 0.5938. 
 
 
+Specify a *k*-nearest neighbors model with the `kknn` engine, tuning `neighbors`;
 
 ```{r}
 # Create a KNN model with k = 5 using the kknn engine
@@ -235,6 +362,8 @@ knn_data_workflow <- workflow() %>%
 neighbors_grid <- grid_regular(neighbors(range = c(1, 10)), levels = 10)
 ```
 
+Use `grid_regular` to set up grids of values for all of the parameters we're tuning. Use values of `neighbors` from $1$ to $10$, the default values of penalty, and values of mixture from $0$ to $1$. Set up 10 levels of each.
+
 ```{r}
 knn_tune_res_data <- tune_grid(
   object = knn_data_workflow, 
@@ -243,9 +372,10 @@ knn_tune_res_data <- tune_grid(
 )
 ```
 
+We will use `collect_metrics()` to print the mean and standard errors of the performance metric ***root mean squared error (RMSE)*** for each model across folds.
+
 ```{r}
 collect_metrics(knn_tune_res_data)
-
 ```
 
 ```{r}
@@ -256,9 +386,11 @@ best_knn_data <- select_by_one_std_err(knn_tune_res_data,
 best_knn_data
 ```
 
-```{r}
-# Logistic Regression
+We will use `finalize_workflow()` and `fit()` to fit our chosen model to the entire **training set**.
 
+Lastly, use `augment()` to assess the performance of our chosen model on your **testing set**. Compare your model's **testing** RMSE to its average RMSE across folds.
+
+```{r}
 knn_final_data <- finalize_workflow(knn_data_workflow,
                                       best_knn_data)
 
@@ -285,6 +417,10 @@ roc_results_knn
 
 ```
 
+The *k*-nearest neighbors model resulted with a roc_auc score of 0.5419. 
+
+
+We'll be fitting and tuning an elastic net, tuning `penalty` and `mixture` (use `multinom_reg()` with the `glmnet` engine).
 
 ```{r}
 en_spec <- multinom_reg(mixture = tune(), 
@@ -301,6 +437,9 @@ en_grid <- grid_regular(penalty(range = c(0.01, 3), trans = identity_trans()),
                              levels = 10)
 ```
 
+Now we will set up a random forest model and workflow. Use the `ranger` engine and set `importance = "impurity"`; we'll be tuning `mtry`, `trees`, and `min_n`.
+
+
 ```{r}
 rf_class_spec <- rand_forest(mtry = tune(), 
                            trees = tune(), 
@@ -314,12 +453,14 @@ rf_class_wf <- workflow() %>%
 ```
 
 ```{r}
-rf_grid <- grid_regular(mtry(range = c(1, 8)), 
+rf_grid <- grid_regular(mtry(range = c(1, 6)), 
                         trees(range = c(200, 600)),
                         min_n(range = c(10, 20)),
-                        levels = 8)
+                        levels = 6)
 rf_grid
 ```
+
+Fit all models to our folded data using `tune_grid()`.
 
 ```{r}
 # # Tune Elastic Net Model
@@ -346,8 +487,8 @@ rf_grid
 ```
 
 ```{r}
-load("en_tune_res.rda")
-load("tune_class.rda")
+load("RDA/en_tune_res.rda")
+load("RDA/tune_class.rda")
 ```
 
 ```{r}
@@ -412,6 +553,18 @@ conf_mat(final_rf_model_test, truth = Class,
   autoplot(type = "heatmap")
 ```
 
+```{r}
+save(tune_class, final_rf_model, file = "~/Github/pstat131FinalProject/RDA/tune_class.rda")
+```
+
+
+---
+
+It seems like multiclass classification does not perform well on this data set. 
+
+We will now try doing binary classification by aggregating the SLOW and NORMAL class into a single class, SAFE. 
+
+Our response variable `Class` now contains only two categories: AGGRESSIVE and SAFE.
 
 ```{r}
 combined_data <- read.csv('~/Github/pstat131FinalProject/data/combined_motion_data.csv')
@@ -436,13 +589,6 @@ data_split <- initial_split(combined_data, prop = train_percent, strata = Class)
 data_train <- training(data_split)
 data_test <- testing(data_split)
 
-# Check the dimensions of the training and testing sets
-dim(data_train)
-dim(data_test)
-```
-
-```{r}
-
 # Set seed for reproducibility
 set.seed(123)
 
@@ -451,17 +597,21 @@ num_folds <- 5
 
 # Create a cross-validation object
 data_folds <- vfold_cv(data_train, v = num_folds, strata = "Class")
-
-# Display the folds
-data_folds
 ```
+
 
 ```{r}
 # Create a recipe
-data_recipe <- recipe(Class ~ AccX + AccY + GyroX + GyroY + GyroZ, data = data_train) %>%
+data_recipe <- recipe(Class ~ AccX + AccY + AccZ + GyroX + GyroY + GyroZ, data = data_train) %>%
   
   # Center and scale all predictors
   step_normalize(all_predictors())
+```
+
+Save set-up for binary classification models
+
+```{r}
+save(data_folds, data_recipe, data_train, data_test, file = "~/Github/pstat131FinalProject/RDA/Model_Setup_Binary.rda")
 ```
 
 ```{r}
@@ -495,7 +645,7 @@ neighbors_grid <- grid_regular(neighbors(range = c(1, 10)), levels = 10)
 logistic_model <- logistic_reg(mode = "classification", engine = "glm")
 
 # Create a workflow
-lm_titanic_workflow <- workflow() %>%
+lm_data_workflow <- workflow() %>%
   add_model(logistic_model) %>%
   add_recipe(data_recipe)
 
@@ -532,11 +682,6 @@ en_tune_res_data<- tune_grid(
 )
 ```
 
-#### Question 11
-
-Use `collect_metrics()` to print the mean and standard errors of the performance metric ***area under the ROC curve*** for each model across folds.
-
-Decide which of the models has performed the best. Explain how/why you made this decision.
 
 ```{r}
 collect_metrics(knn_tune_res_data)
@@ -792,10 +937,6 @@ evaluate(model_cnn_lstm_2classes, x_train_multiclass, y_train_multiclass)
 
 
 
-```{r}
-# Get Multiclass Model Details
-summary(model_multiclass)
-```
 
 ```{r}
 # Get Multiclass Model Details
