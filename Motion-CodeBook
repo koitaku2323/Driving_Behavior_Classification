@@ -1,0 +1,21 @@
+#########################################################
+### Driver Behavior Classification Project - Codebook ###
+#########################################################
+
+
+Response Variable: 
+
+- `Class`: A categorical variable (factor) indicating the driving behavior classification, which includes categories such as SLOW, NORMAL, and AGGRESSIVE.
+
+Predictor Variables:
+
+- `AccX`: A numerical variable representing acceleration along the X-axis in meters per second squared (m/s²).
+- `AccY`: A numerical variable representing acceleration along the Y-axis in meters per second squared (m/s²).
+- `AccZ`: A numerical variable representing acceleration along the Z-axis in meters per second squared (m/s²).
+- `GyroX`: A numerical variable representing rotation along the X-axis in degrees per second (°/s).
+- `GyroY`: A numerical variable representing rotation along the Y-axis in degrees per second (°/s).
+- `GyroZ`: A numerical variable representing rotation along the Z-axis in degrees per second (°/s).
+
+Variables not used in prediction:
+
+- `Timestamp`: An integer variable representing time in seconds.

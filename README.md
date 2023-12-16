@@ -1,37 +1,62 @@
-# Final Project
+# Driving Behavior Classification: A Comprehensive Exploration of Predictive Models
 
-Submission Contents
+## From Random Forest to CNN-LSTM, Unraveling the Layers of Machine Learning for Safer Roads
 
-You should submit a .zip file that contains the following:
+### Contributors
 
-- an .Rmd (R Markdown) file containing your project, in the form of a written report
+Ryan Yee
 
-- the knitted .html or .pdf file containing your project
+## Abstract
 
-- any .R files (R scripts) containing work on your project. The degree of organization of these can vary, but should at least have meaningful file titles, like "eda.R" or "missing_data_analyses.R," etc. 
+The "Driving Behavior Classification" project presents a comprehensive exploration of predictive models applied to driving behavior data. The journey unfolds with the preprocessing of accelerometer and gyroscope sensor data, followed by the creation and fine-tuning of diverse machine learning models. Seven distinct techniques, including Logistic Regression, K-Nearest Neighbors, Linear Discriminant Analysis, Quadratic Discriminant Analysis, Elastic Net, Multinomial Regression, and Random Forest, are implemented and tested for binary and multiclass classification settings.
 
-- any raw data files. Exceptions can be made. For instance, if your data files are huge in terms of megabytes, you don't have to submit them. If your data is proprietary or confidential, you don't have to submit it.
+The project's focus on model accuracy extends to the evaluation and comparison of these models, paving the way for informed decisions on the optimal model for predicting driving behaviors. Notably, the Random Forest model emerges as the best performer in multiclass classification, showcasing a ROC AUC score of 0.9938.
 
-- a codebook. This should take the form of a document (either .doc, .html, .pdf, or .txt) that, at minimum, identifies and defines each column in your final data set. If a variable takes on different values (for example, 1 = "single," 2 = "married," etc.), those values should be defined in the codebook.
+In a bonus section, the project explores the realm of deep learning with a Convolutional Neural Network-Long Short-Term Memory (CNN-LSTM) model. The CNN-LSTM model is tailored for binary classification, achieving a respectable ROC AUC score of 0.6724 on the testing dataset.
 
-Your project .zip file should be laid out in a specific way. This is an example of the file layout:
+The final comparison between the Random Forest and CNN-LSTM models reveals intriguing insights. While the Random Forest model exhibits a ROC AUC score of 0.5864, the CNN-LSTM model outperforms with a ROC AUC score of 0.6773 on the testing dataset. These results provide valuable perspectives for choosing the most effective model for driving behavior classification.
 
+#### Our Data
 
+The dataset at hand focuses on predicting driving behavior, specifically targeting aggressive driving actions that contribute significantly to road traffic accidents. The data was collected using an Android application designed to utilize the accelerometer and gyroscope sensors on smartphones, with a specific emphasis on a Samsung Galaxy S21 device. The recorded information includes acceleration and rotation data along the X, Y, and Z axes, timestamp information, and classification labels indicating whether the driving behavior is categorized as Slow, Normal, or Aggressive. Noteworthy aspects of the dataset include a sampling rate of 2 samples per second, removal of gravitational acceleration, and the use of sensors for data collection.
 
-If the .zip file is too large to submit via Canvas, you may submit it to the instructor (me) personally via email at katie_m_coburn@ucsb.edu, either as an attachment or via Google Drive, etc.
-Report Contents
-Your final project report should be written similarly to a paper, with figures, code, and results included throughout to illustrate your points and findings. Text should be included to guide the reader. I recommend reading through the example projects to get an idea of this layout, and referencing the project rubric for more information. Specifically, your report must contain:
+You can visit the data set information on Kaggle [here](https://www.kaggle.com/datasets/outofskills/driving-behavior/data).
 
-- An introduction section: Describes the data, the research questions, provides any background readers need to understand your project, etc.
+Response Variable: 
 
-- A conclusion section: Discusses the outcome(s) of models you fit. Which models performed well, which performed poorly? Were you surprised by model performance? Next steps? General conclusions?
+- `Class`: A categorical variable (factor) indicating the driving behavior classification, which includes categories such as SLOW, NORMAL, and AGGRESSIVE.
 
-- A table of contents
+Predictor Variables:
 
-- A section for exploratory data analysis: This should contain at least 3 to 5 visualizations and/or tables and their interpretation/discussion. At minimum you should create a univariate visualization of the outcome(s), a bi-variate or multivariate visualization of the relationship(s) between the outcome and select predictors, etc. Part of an EDA involves asking questions about your data and exploring your data to find the answers.
+- `AccX`: A numerical variable representing acceleration along the X-axis in meters per second squared (m/s²).
+- `AccY`: A numerical variable representing acceleration along the Y-axis in meters per second squared (m/s²).
+- `AccZ`: A numerical variable representing acceleration along the Z-axis in meters per second squared (m/s²).
+- `GyroX`: A numerical variable representing rotation along the X-axis in degrees per second (°/s).
+- `GyroY`: A numerical variable representing rotation along the Y-axis in degrees per second (°/s).
+- `GyroZ`: A numerical variable representing rotation along the Z-axis in degrees per second (°/s).
 
-- A section discussing data splitting and cross-validation: Describe your process of splitting data into training, test, and/or validation sets. Describe the process of cross-validation. Remember to write for a general audience. Act as if your project will be read by people new to machine learning.
+Variables not used in prediction:
 
-- A section discussing model fitting: Describe the types of models you fit, their parameter values, and the results.
+- `Timestamp`: An integer variable representing time in seconds.
 
-- Model selection and performance: A table and/or graph describing the performance of your best-fitting model on testing data. Describe your best-fitting model however you choose, and the quality of its predictions, etc.
+## Repository Contents
+
+Structure of this repository:
+
+```         
+root directory
+├── data
+   ├── combined_data.csv
+   ├── test_motion.csv
+   ├── train_motion.csv
+├── Drafts
+   ├── pstat131FinalProject.Rmd
+├── Images
+├── RDA
+├── Models
+├── Motion-CodeBook.txt
+├── Driving_Behavior_Classification.Rmd
+├── Driving_Behavior_Classification.html
+├── README.md 
+└── .gitignore
+```

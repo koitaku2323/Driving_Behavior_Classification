@@ -247,7 +247,7 @@ data_recipe <- recipe(Class ~ AccX + AccY + AccZ + GyroX + GyroY + GyroZ, data =
 Because building models take so much computing time, we will be saving the results to an RDA file. This is done so that once we have the model we want, we can go back anytime later and load it.
 
 ```{r}
-save(data_folds, data_recipe, data_train, data_test, file = "~/Github/pstat131FinalProject/RDA/Model_Setup.rda")
+save(combined_data, data_folds, data_recipe, data_train, data_test, file = "~/Github/pstat131FinalProject/RDA/Model_Setup.rda")
 ```
 
 
@@ -611,7 +611,7 @@ data_recipe <- recipe(Class ~ AccX + AccY + AccZ + GyroX + GyroY + GyroZ, data =
 Save set-up for binary classification models
 
 ```{r}
-save(data_folds, data_recipe, data_train, data_test, file = "~/Github/pstat131FinalProject/RDA/Model_Setup_Binary.rda")
+save(combined_data, data_folds, data_recipe, data_train, data_test, file = "~/Github/pstat131FinalProject/RDA/Model_Setup_Binary.rda")
 ```
 
 ```{r}
@@ -973,6 +973,69 @@ summary(model_multiclass_lstm)
 
 ```
 
+```{r}
+load("~/Github/pstat131FinalProject/RDA/Model_Setup.rda") # Multiclass
+
+# Split the data into training and test sets
+set.seed(102722)
+partitions <- combined_data %>%
+  initial_split(prop = 0.8)
+
+# Extract features for multiclass classification
+x_train_multiclass <- training(partitions) %>%
+  select(AccX, AccY, AccZ, GyroX, GyroY, GyroZ) %>%
+  as.matrix()
+
+# Reshape input data for LSTM (assuming 3 time steps for each feature)
+time_steps <- 3
+n_features <- ncol(x_train_multiclass)
+x_train_multiclass <- array(x_train_multiclass, dim = c(nrow(x_train_multiclass), time_steps, n_features))
+
+# Extract multiclass labels
+y_train_multiclass <- training(partitions) %>%
+  pull(Class) %>%
+  as.numeric() - 1
+
+y_train_multiclass <- to_categorical(y_train_multiclass, num_classes = 3)
+
+# Manually tuned parameters
+filters <- 64
+kernel_size <- 3
+lstm_units <- 100
+dropout_rate <- 0.5
+learning_rate <- 0.001
+epochs <- 15  # Adjust as needed
+batch_size <- 32
+
+# Create the CNN-LSTM model with manually tuned parameters
+model_cnn_lstm_3classes <- keras_model_sequential() %>%
+  layer_conv_1d(filters = filters, kernel_size = kernel_size, activation = 'relu', input_shape = c(time_steps, n_features)) %>%
+  layer_lstm(units = lstm_units, activation = 'relu') %>%
+  layer_dropout(dropout_rate) %>%
+  layer_dense(units = 3, activation = 'softmax')  # 3 classes
+
+model_cnn_lstm_3classes %>%
+  compile(
+    loss = 'categorical_crossentropy',
+    optimizer = optimizer_adam(lr = learning_rate),
+    metrics = c('accuracy')
+  )
+
+# Train the CNN-LSTM model with manually tuned parameters
+history_cnn_lstm_3classes <- model_cnn_lstm_3classes %>%
+  fit(
+    x = x_train_multiclass,
+    y = y_train_multiclass,
+    validation_split = 0.2,
+    epochs = epochs,
+    batch_size = batch_size
+  )
+```
+
+```{r}
+# Evaluate CNN-LSTM Model using the training/testing partition (not the testing data)
+evaluate(model_cnn_lstm_3classes, x_train_multiclass, y_train_multiclass)
+```
 
 
 
