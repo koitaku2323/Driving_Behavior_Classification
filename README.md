@@ -50,7 +50,7 @@ root directory
    ├── test_motion.csv
    ├── train_motion.csv
 ├── Drafts
-   ├── pstat131FinalProject.Rmd
+   ├── Driving_Behavior_Classification.Rmd
 ├── Images
 ├── RDA
 ├── Models
